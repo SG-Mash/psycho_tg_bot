@@ -54,7 +54,7 @@ def test_choice(message):
 @bot.callback_query_handler(func=lambda call: True)
 def test_switcher(call):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton('Начать'))
+    markup.add(types.KeyboardButton('🤓 Начать'))
     if call.data == 'Beck test':
         bot.send_message(
             call.message.chat.id,
@@ -62,16 +62,16 @@ def test_switcher(call):
             reply_markup=markup,
             parse_mode='html'
         )
-        bot.register_next_step_handler(call.message, test_run, '1', 'beck_test.json')
+        bot.register_next_step_handler(call.message, test_run, '1', 'beck_test.json', 'beck_test_recommendations.txt')
     elif call.data == 'one more test':
         bot.send_message(call.message.chat.id, 'One more test')
     elif call.data == 'New test':
         bot.send_message(call.message.chat.id, 'New test')
 
 
-def test_run(message, question_number, file_name):
+def test_run(message, question_number, file_json, file_txt):
     global result, conclusion
-    with open(file_name, encoding='utf-8') as json_file:
+    with open(file_json, encoding='utf-8') as json_file:
         data = json.load(json_file)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     for answer in data['answers']:
@@ -85,7 +85,8 @@ def test_run(message, question_number, file_name):
             question_number,
             data['answers'],
             data['answer_points'],
-            file_name
+            file_json,
+            file_txt
         )
     else:
         for key, points in data['result_points'].items():
@@ -94,12 +95,13 @@ def test_run(message, question_number, file_name):
                 break
         text = f'Ваш результат: <b>{result}</b>. {data["conclusion"][conclusion]}\n{data["recommendation"]}'
         bot.send_message(message.chat.id, text, reply_markup=types.ReplyKeyboardRemove(), parse_mode='html')
+        bot.send_message(message.chat.id, get_data_from_txt_file(file_txt), parse_mode='html')
 
 
-def result_calculation(message, question_number, answers, points, file_name):
+def result_calculation(message, question_number, answers, points, file_json, file_txt):
     global result
     result += points[answers.index(message.text)]
-    test_run(message, str(int(question_number) + 1), file_name)
+    test_run(message, str(int(question_number) + 1), file_json, file_txt)
 
 
 def main():
