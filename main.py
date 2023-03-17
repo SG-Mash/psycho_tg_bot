@@ -1,22 +1,63 @@
-import telebot
-from telebot import types
-import os
+from telebot import TeleBot, types
+from os import getenv
+import datetime as dt
+import sqlite3 as sl
 import json
 from dotenv import load_dotenv
 
 load_dotenv()
 
-bot_token = os.getenv('TOKEN')
-bot = telebot.TeleBot(bot_token)
+bot_token = getenv('TOKEN')
+bot = TeleBot(bot_token)
+
+conn = sl.connect('database.db', check_same_thread=False)
+cursor = conn.cursor()
 
 result = 0
 conclusion = ''
+
+
+def db_add_user(tg_user_id, first_name, last_name, tg_username):
+    cursor.execute(
+        'INSERT INTO users (tg_user_id, first_name, last_name, tg_username) VALUES (?, ?, ?, ?)',
+        (tg_user_id, first_name, last_name, tg_username)
+    )
+    conn.commit()
+
+
+def user_exists_in_db(user_id):
+    user_info = cursor.execute(
+        'SELECT * FROM users WHERE tg_user_id="user_id"'
+    )
+    return user_info
+
+
+def add_survey_result_in_db(user_id, survey_name, survey_result, survey_date):
+    cursor.execute(
+        'INSERT INTO surveys (user_id, survey_name, survey_result, survey_date) VALUES(?, ?, ?, ?)',
+        (user_id, survey_name, survey_result, survey_date)
+    )
+    conn.commit()
+
+
+def get_passed_survey_info(user_id):
+    cursor.execute(
+        'SELECT survey_date, survey_name, survey_result FROM surveys WHERE user_id="user_id"'
+    )
+    data = cursor.fetchall()
+    return data
 
 
 def get_data_from_txt_file(file_name):
     with open(file_name, encoding='utf-8') as file:
         text = file.read()
     return text
+
+
+def break_test(message):
+    global result
+    result = 0
+    bot.send_message(message.chat.id, 'Тест прерван', reply_markup=types.ReplyKeyboardRemove())
 
 
 @bot.message_handler(commands=['start'])
@@ -26,6 +67,24 @@ def start_message(message):
         message.chat.id,
         'Здесь собраны тесты, которые помогут тебе определить твое психологическое состояние'
     )
+    user_id = message.from_user.id
+    first_name = message.from_user.first_name
+    last_name = message.from_user.last_name
+    username = message.from_user.username
+    if not user_exists_in_db(user_id):
+        db_add_user(user_id, first_name, last_name, username)
+
+
+@bot.message_handler(commands=['my_tests'])
+def my_passed_tests(message):
+    surveys = get_passed_survey_info(message.from_user.id)
+    if len(surveys) != 0:
+        bot.send_message(message.chat.id, 'Ваши пройденные тесты:')
+        for survey in surveys:
+            text = f'Дата прохождения: {survey[0]}\nТест: {survey[1]}\nРезультат: {str(survey[2])}'
+            bot.send_message(message.chat.id, text)
+    else:
+        bot.send_message(message.chat.id, 'Вы еще не проходили тесты')
 
 
 @bot.message_handler(commands=['description'])
@@ -48,7 +107,7 @@ def test_choice(message):
         data = json.load(json_file)
     for key, value in data.items():
         markup.add(types.InlineKeyboardButton(key, callback_data=value))
-    bot.send_message(message.chat.id, 'Выберете тест', reply_markup=markup)
+    bot.send_message(message.chat.id, 'Выберете тест:', reply_markup=markup)
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -76,32 +135,43 @@ def test_run(message, question_number, file_json, file_txt):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     for answer in data['answers']:
         markup.add(types.KeyboardButton(answer))
-    if question_number in data['questions'].keys():
-        bot.send_message(message.chat.id, f'Вопрос {question_number}')
-        bot.send_message(message.chat.id, data['questions'][question_number], reply_markup=markup)
-        bot.register_next_step_handler(
-            message,
-            result_calculation,
-            question_number,
-            data['answers'],
-            data['answer_points'],
-            file_json,
-            file_txt
-        )
+    if message.text == '🤓 Начать' or message.text in data['answers']:
+        if question_number in data['questions'].keys():
+            bot.send_message(message.chat.id, f'Вопрос {question_number}')
+            bot.send_message(message.chat.id, data['questions'][question_number], reply_markup=markup)
+            bot.register_next_step_handler(
+                message,
+                result_calculation,
+                question_number,
+                data['answers'],
+                data['answer_points'],
+                file_json,
+                file_txt
+            )
+        else:
+            for key, points in data['result_points'].items():
+                if points[0] <= result <= points[1]:
+                    conclusion = key
+                    break
+            text = f'Ваш результат: <b>{result}</b>. {data["conclusion"][conclusion]}\n{data["recommendation"]}'
+            bot.send_message(message.chat.id, text, reply_markup=types.ReplyKeyboardRemove(), parse_mode='html')
+            bot.send_message(message.chat.id, get_data_from_txt_file(file_txt), parse_mode='html')
+            user_id = message.from_user.id
+            survey_name = data['survey_name']
+            survey_result = result
+            survey_date = dt.datetime.now().strftime('%H:%M:%S %d-%m-%Y')
+            add_survey_result_in_db(user_id, survey_name, survey_result, survey_date)
     else:
-        for key, points in data['result_points'].items():
-            if points[0] <= result <= points[1]:
-                conclusion = key
-                break
-        text = f'Ваш результат: <b>{result}</b>. {data["conclusion"][conclusion]}\n{data["recommendation"]}'
-        bot.send_message(message.chat.id, text, reply_markup=types.ReplyKeyboardRemove(), parse_mode='html')
-        bot.send_message(message.chat.id, get_data_from_txt_file(file_txt), parse_mode='html')
+        break_test(message)
 
 
 def result_calculation(message, question_number, answers, points, file_json, file_txt):
     global result
-    result += points[answers.index(message.text)]
-    test_run(message, str(int(question_number) + 1), file_json, file_txt)
+    if message.text in answers:
+        result += points[answers.index(message.text)]
+        test_run(message, str(int(question_number) + 1), file_json, file_txt)
+    else:
+        break_test(message)
 
 
 def main():
