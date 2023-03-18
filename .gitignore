@@ -1,18 +1,3 @@
 /.env
-/mental_health_bot.txt
-/psycho_logo.png
-/Шкала Тревоги Бека.docx
-/psycho_logo_mini.png
-/psycho_logo_mini_test.png
-/description_logo.jpeg
-/beck_test.json
-/beck_test_description.txt
-.idea
-/beck_test_recommendations.txt
-/list_of_tests.json
-/about_bot.txt
-/about_author.txt
+/.idea
 /database.db
-/kovalel_test_description.txt
-/kovalev_test.json
-/kovalev_test_recommendations.txt

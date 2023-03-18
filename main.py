@@ -19,7 +19,7 @@ conclusion = ''
 
 def db_add_user(tg_user_id, first_name, last_name, tg_username):
     cursor.execute(
-        'INSERT INTO users (tg_user_id, first_name, last_name, tg_username) VALUES (?, ?, ?, ?)',
+        'INSERT INTO Users (tg_user_id, first_name, last_name, tg_username) VALUES (?, ?, ?, ?)',
         (tg_user_id, first_name, last_name, tg_username)
     )
     conn.commit()
@@ -27,8 +27,8 @@ def db_add_user(tg_user_id, first_name, last_name, tg_username):
 
 def user_exists_in_db(user_id):
     user_info = cursor.execute(
-        'SELECT * FROM users WHERE tg_user_id="user_id"'
-    )
+        'SELECT * FROM Users WHERE tg_user_id=?', (user_id,)
+    ).fetchone()
     return user_info
 
 
@@ -41,10 +41,9 @@ def add_survey_result_in_db(user_id, survey_name, survey_result, survey_date):
 
 
 def get_passed_survey_info(user_id):
-    cursor.execute(
-        'SELECT survey_date, survey_name, survey_result FROM surveys WHERE user_id="user_id"'
-    )
-    data = cursor.fetchall()
+    data = cursor.execute(
+        'SELECT survey_date, survey_name, survey_result FROM surveys WHERE user_id=?', (user_id,)
+    ).fetchall()
     return data
 
 
@@ -89,12 +88,32 @@ def my_passed_tests(message):
 
 @bot.message_handler(commands=['description'])
 def description(message):
-    bot.send_message(message.chat.id, get_data_from_txt_file('about_bot.txt'))
+    bot.send_message(message.chat.id, get_data_from_txt_file('about/about_bot.txt'))
 
 
 @bot.message_handler(commands=['author'])
 def about_author(message):
-    bot.send_message(message.chat.id, get_data_from_txt_file('about_author.txt'))
+    bot.send_message(message.chat.id, get_data_from_txt_file('about/about_author.txt'))
+
+
+@bot.message_handler(commands=['stat'])
+def bot_data(message):
+    if message.from_user.id == 21662680 or message.from_user.id == 1536319383:
+        bot_users_qty = cursor.execute(
+            'SELECT COUNT(*) FROM Users'
+        ).fetchone()
+        text = f'Кол-во человек, запускавших бот: {str(bot_users_qty[0])}'
+        bot.send_message(message.chat.id, text)
+        with open('list_of_tests.json', encoding='utf-8') as json_file:
+            surveys = json.load(json_file)
+        for survey in surveys.keys():
+            survey_count = cursor.execute(
+                'SELECT COUNT(survey_name) FROM Surveys WHERE survey_name=?', (survey,)
+            ).fetchone()
+            text = f'Кол-во прохождений теста "{survey}": {str(survey_count[0])}'
+            bot.send_message(message.chat.id, text)
+    else:
+        my_passed_tests(message)
 
 
 @bot.message_handler(commands=['tests'])
@@ -117,15 +136,31 @@ def test_switcher(call):
     if call.data == 'Beck test':
         bot.send_message(
             call.message.chat.id,
-            get_data_from_txt_file('beck_test_description.txt'),
+            get_data_from_txt_file('surveys/beck_test_description.txt'),
             reply_markup=markup,
             parse_mode='html'
         )
-        bot.register_next_step_handler(call.message, test_run, '1', 'beck_test.json', 'beck_test_recommendations.txt')
-    elif call.data == 'one more test':
-        bot.send_message(call.message.chat.id, 'One more test')
-    elif call.data == 'New test':
-        bot.send_message(call.message.chat.id, 'New test')
+        bot.register_next_step_handler(
+            call.message,
+            test_run,
+            '1',
+            'surveys/beck_test.json',
+            'surveys/beck_test_recommendations.txt'
+        )
+    elif call.data == 'Self-esteem':
+        bot.send_message(
+            call.message.chat.id,
+            get_data_from_txt_file('surveys/kovalev_test_description.txt'),
+            reply_markup=markup,
+            parse_mode='html'
+        )
+        bot.register_next_step_handler(
+            call.message,
+            test_run,
+            '1',
+            'surveys/kovalev_test.json',
+            'surveys/kovalev_test_recommendations.txt'
+        )
 
 
 def test_run(message, question_number, file_json, file_txt):
