@@ -32,7 +32,7 @@ def user_exists_in_db(user_id):
     return user_info
 
 
-def add_survey_result_in_db(user_id, survey_name, survey_result, survey_date):
+def add_survey_result_to_db(user_id, survey_name, survey_result, survey_date):
     cursor.execute(
         'INSERT INTO surveys (user_id, survey_name, survey_result, survey_date) VALUES(?, ?, ?, ?)',
         (user_id, survey_name, survey_result, survey_date)
@@ -131,6 +131,8 @@ def test_choice(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def test_switcher(call):
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text='Кнопка',
+                          reply_markup=None)
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton('🤓 Начать'))
     if call.data == 'Beck test':
@@ -195,7 +197,7 @@ def test_run(message, question_number, file_json, file_txt):
             survey_name = data['survey_name']
             survey_result = result
             survey_date = dt.datetime.now().strftime('%H:%M:%S %d-%m-%Y')
-            add_survey_result_in_db(user_id, survey_name, survey_result, survey_date)
+            add_survey_result_to_db(user_id, survey_name, survey_result, survey_date)
     else:
         break_test(message)
 
